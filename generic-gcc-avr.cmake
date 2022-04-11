@@ -7,6 +7,8 @@
 # return. (I don't like beer much.)
 #
 # Matthias Kleemann
+#
+# Modified by Jon Lovering for this project
 ##########################################################################
 
 ##########################################################################
@@ -61,6 +63,9 @@ set(AVR 1)
 # - AVR_UPLOADTOOL
 # - AVR_UPLOADTOOL_PORT
 # - AVR_PROGRAMMER
+# - AVR_ISPTOOL
+# - AVR_ISPTOOL_PORT
+# - AVR_ISP_PROGRAMMER
 # - AVR_MCU
 # - AVR_SIZE_ARGS
 ##########################################################################
@@ -85,10 +90,35 @@ endif(NOT AVR_UPLOADTOOL_PORT)
 # default programmer (hardware)
 if(NOT AVR_PROGRAMMER)
     set(
-            AVR_PROGRAMMER avrispmkII
+            AVR_PROGRAMMER arduino
             CACHE STRING "Set default programmer hardware model: avrispmkII"
     )
 endif(NOT AVR_PROGRAMMER)
+
+# default upload tool
+if(NOT AVR_ISPTOOL)
+    set(
+            AVR_ISP_TOOL ${AVR_UPLOADTOOL}
+            CACHE STRING "Set default ISP upload tool to upload tool: ${AVR_UPLOADTOOL}"
+    )
+    find_program(AVRISP_TOOL ${AVR_UPLOADTOOL})
+endif(NOT AVR_ISPTOOL)
+
+# default upload tool port
+if(NOT AVR_ISPTOOL_PORT)
+    set(
+            AVR_ISP_TOOL_PORT ${AVR_UPLOADTOOL_PORT}
+            CACHE STRING "Set default ISP upload tool port to upload tool port: ${AVR_UPLOADTOOL_PORT}"
+    )
+endif(NOT AVR_ISPTOOL_PORT)
+
+# default programmer (hardware)
+if(NOT AVR_ISP_PROGRAMMER)
+    set(
+            AVR_ISP_PROGRAMMER ${AVR_PROGRAMMER}
+            CACHE STRING "Set default programmer hardware model to upload tool hardware model: ${AVR_PROGRAMMER}"
+    )
+endif(NOT AVR_ISP_PROGRAMMER)
 
 # default MCU (chip)
 if(NOT AVR_MCU)
@@ -108,12 +138,38 @@ if(NOT AVR_SIZE_ARGS)
 endif(NOT AVR_SIZE_ARGS)
 
 # prepare base flags for upload tool
+set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER} -P ${AVR_UPLOADTOOL_PORT})
+
+# prepare base flags for ISP tool
+set(AVR_ISPTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_ISP_PROGRAMMER} -P ${AVR_ISPTOOL_PORT})
 set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER})
 
 # use AVR_UPLOADTOOL_BAUDRATE as baudrate for upload tool (if defined)
 if(AVR_UPLOADTOOL_BAUDRATE)
     set(AVR_UPLOADTOOL_BASE_OPTIONS ${AVR_UPLOADTOOL_BASE_OPTIONS} -b ${AVR_UPLOADTOOL_BAUDRATE})
 endif()
+
+if(AVR_ISPTOOL_BAUDRATE)
+    set(AVR_ISPTOOL_BASE_OPTIONS ${AVR_ISPTOOL_BASE_OPTIONS} -b ${AVR_ISPTOOL_BAUDRATE})
+endif()
+
+if(AVR_CONNECT_TOOL_BAUD)
+   set(AVR_CONNECT_TOOL_BASE_OPTIONS ${AVR_CONNECT_TOOL_BASE_OPTIONS} -b ${AVR_CONNECT_TOOL_BAUD})
+endif()
+
+##########################################################################
+# status messages
+##########################################################################
+message(STATUS "Current uploadtool is: ${AVR_UPLOADTOOL}")
+message(STATUS "Current programmer is: ${AVR_PROGRAMMER}")
+message(STATUS "Current upload port is: ${AVR_UPLOADTOOL_PORT}")
+message(STATUS "Current uploadtool options are: ${AVR_UPLOADTOOL_OPTIONS}")
+message(STATUS "Current ISP tool is: ${AVR_ISPTOOL}")
+message(STATUS "Current IPS programmer is: ${AVR_ISP_PROGRAMMER}")
+message(STATUS "Current IPS port is: ${AVR_ISPTOOL_PORT}")
+message(STATUS "Current MCU is set to: ${AVR_MCU}")
+message(STATUS "Current H_FUSE is set to: ${AVR_H_FUSE}")
+message(STATUS "Current L_FUSE is set to: ${AVR_L_FUSE}")
 
 ##########################################################################
 # check build types:
@@ -238,7 +294,6 @@ function(add_avr_executable EXECUTABLE_NAME)
       upload_${EXECUTABLE_NAME}
       ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} ${AVR_UPLOADTOOL_OPTIONS}
          -U flash:w:${hex_file}
-         -P ${AVR_UPLOADTOOL_PORT}
       DEPENDS ${hex_file}
       COMMENT "Uploading ${hex_file} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
    )
@@ -249,7 +304,6 @@ function(add_avr_executable EXECUTABLE_NAME)
       upload_${EXECUTABLE_NAME}_eeprom
       ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} ${AVR_UPLOADTOOL_OPTIONS}
          -U eeprom:w:${eeprom_image}
-         -P ${AVR_UPLOADTOOL_PORT}
       DEPENDS ${eeprom_image}
       COMMENT "Uploading ${eeprom_image} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
    )
@@ -370,32 +424,32 @@ function(avr_generate_fixed_targets)
    # get status
    add_custom_target(
       get_status
-      ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT} -n -v
+      ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS} -n -v
       COMMENT "Get status from ${AVR_MCU}"
    )
    
    # get fuses
-   add_custom_target(
-      get_fuses
-      ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT} -n
-         -U lfuse:r:-:b
-         -U hfuse:r:-:b
-      COMMENT "Get fuses from ${AVR_MCU}"
-   )
+      add_custom_target(
+         get_fuses
+         ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS} -n
+            -U lfuse:r:-:b
+            -U hfuse:r:-:b
+         COMMENT "Get fuses from ${AVR_MCU}"
+      )
    
    # set fuses
-   add_custom_target(
-      set_fuses
-      ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT}
-         -U lfuse:w:${AVR_L_FUSE}:m
-         -U hfuse:w:${AVR_H_FUSE}:m
-         COMMENT "Setup: High Fuse: ${AVR_H_FUSE} Low Fuse: ${AVR_L_FUSE}"
-   )
-   
+      add_custom_target(
+         set_fuses
+         ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS}
+            -U lfuse:w:${AVR_L_FUSE}:m
+            -U hfuse:w:${AVR_H_FUSE}:m
+            COMMENT "Setup: High Fuse: ${AVR_H_FUSE} Low Fuse: ${AVR_L_FUSE}"
+      )
+
    # get oscillator calibration
    add_custom_target(
       get_calibration
-         ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT}
+         ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS}
          -U calibration:r:${AVR_MCU}_calib.tmp:r
          COMMENT "Write calibration status of internal oscillator to ${AVR_MCU}_calib.tmp."
    )
@@ -403,7 +457,7 @@ function(avr_generate_fixed_targets)
    # set oscillator calibration
    add_custom_target(
       set_calibration
-      ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT}
+         ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS}
          -U calibration:w:${AVR_MCU}_calib.hex
          COMMENT "Program calibration status of internal oscillator from ${AVR_MCU}_calib.hex."
    )
