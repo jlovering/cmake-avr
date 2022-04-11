@@ -190,6 +190,7 @@ message(STATUS "Current connect tool port is: ${AVR_CONNECT_TOOL_PORT}")
 message(STATUS "Current MCU is set to: ${AVR_MCU}")
 message(STATUS "Current H_FUSE is set to: ${AVR_H_FUSE}")
 message(STATUS "Current L_FUSE is set to: ${AVR_L_FUSE}")
+message(STATUS "Current E_FUSE is set to: ${AVR_E_FUSE}")
 
 ##########################################################################
 # check build types:
@@ -449,6 +450,7 @@ function(avr_generate_fixed_targets)
    )
    
    # get fuses
+   if(NOT AVR_E_FUSE)
       add_custom_target(
          get_fuses
          ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS} -n
@@ -456,8 +458,19 @@ function(avr_generate_fixed_targets)
             -U hfuse:r:-:b
          COMMENT "Get fuses from ${AVR_MCU}"
       )
+   else()
+      add_custom_target(
+         get_fuses
+         ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS} -n
+            -U lfuse:r:-:b
+            -U hfuse:r:-:b
+            -U efuse:r:-:b
+         COMMENT "Get fuses from ${AVR_MCU}"
+      )
+   endif(NOT AVR_E_FUSE)
    
    # set fuses
+   if(NOT AVR_E_FUSE)
       add_custom_target(
          set_fuses
          ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS}
@@ -465,6 +478,16 @@ function(avr_generate_fixed_targets)
             -U hfuse:w:${AVR_H_FUSE}:m
             COMMENT "Setup: High Fuse: ${AVR_H_FUSE} Low Fuse: ${AVR_L_FUSE}"
       )
+   else()
+      add_custom_target(
+         set_fuses
+         ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS}
+            -U lfuse:w:${AVR_L_FUSE}:m
+            -U hfuse:w:${AVR_H_FUSE}:m
+            -U efuse:w:${AVR_E_FUSE}:b
+            COMMENT "Setup: High Fuse: ${AVR_H_FUSE} Low Fuse: ${AVR_L_FUSE}"
+      )
+   endif(NOT AVR_E_FUSE)
 
    # get oscillator calibration
    add_custom_target(
