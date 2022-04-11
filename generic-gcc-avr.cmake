@@ -66,6 +66,8 @@ set(AVR 1)
 # - AVR_ISPTOOL
 # - AVR_ISPTOOL_PORT
 # - AVR_ISP_PROGRAMMER
+# - AVR_CONNECT_TOOL
+# - AVR_CONNECT_TOOL_PORT
 # - AVR_MCU
 # - AVR_SIZE_ARGS
 ##########################################################################
@@ -94,6 +96,21 @@ if(NOT AVR_PROGRAMMER)
             CACHE STRING "Set default programmer hardware model: avrispmkII"
     )
 endif(NOT AVR_PROGRAMMER)
+
+if(NOT AVR_CONNECT_TOOL)
+   set(
+            AVR_CONNECT_TOOL minicom
+            CACHE STRING "Set default connection tool to minicom"
+   )
+   find_program(AVRISP_TOOL ${AVR_CONNECT_TOOL})
+endif(NOT AVR_CONNECT_TOOL)
+
+if(NOT AVR_CONNECT_TOOL_PORT)
+   set(
+            AVR_CONNECT_TOOL_PORT /dev/tty.usbserial
+            CACHE STRING "Set default connection tool port to /dev/tty.usbserial (this is almost certianly wrong)"
+   )
+endif(NOT AVR_CONNECT_TOOL_PORT)
 
 # default upload tool
 if(NOT AVR_ISPTOOL)
@@ -142,7 +159,8 @@ set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER} -P ${AVR_UPLO
 
 # prepare base flags for ISP tool
 set(AVR_ISPTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_ISP_PROGRAMMER} -P ${AVR_ISPTOOL_PORT})
-set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER})
+
+set(AVR_CONNECT_TOOL_BASE_OPTIONS -D ${AVR_CONNECT_TOOL_PORT})
 
 # use AVR_UPLOADTOOL_BAUDRATE as baudrate for upload tool (if defined)
 if(AVR_UPLOADTOOL_BAUDRATE)
@@ -167,6 +185,8 @@ message(STATUS "Current uploadtool options are: ${AVR_UPLOADTOOL_OPTIONS}")
 message(STATUS "Current ISP tool is: ${AVR_ISPTOOL}")
 message(STATUS "Current IPS programmer is: ${AVR_ISP_PROGRAMMER}")
 message(STATUS "Current IPS port is: ${AVR_ISPTOOL_PORT}")
+message(STATUS "Current connect tool is: ${AVR_CONNECT_TOOL}")
+message(STATUS "Current connect tool port is: ${AVR_CONNECT_TOOL_PORT}")
 message(STATUS "Current MCU is set to: ${AVR_MCU}")
 message(STATUS "Current H_FUSE is set to: ${AVR_H_FUSE}")
 message(STATUS "Current L_FUSE is set to: ${AVR_L_FUSE}")
@@ -460,6 +480,11 @@ function(avr_generate_fixed_targets)
          ${AVR_ISP_TOOL} ${AVR_ISP_TOOL_BASE_OPTIONS}
          -U calibration:w:${AVR_MCU}_calib.hex
          COMMENT "Program calibration status of internal oscillator from ${AVR_MCU}_calib.hex."
+   )
+
+   add_custom_target(
+      connect
+      ${AVR_CONNECT_TOOL} ${AVR_CONNECT_TOOL_BASE_OPTIONS}
    )
 endfunction()
 
