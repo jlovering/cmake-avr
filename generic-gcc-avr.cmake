@@ -107,8 +107,8 @@ endif(NOT AVR_CONNECT_TOOL)
 
 if(NOT AVR_CONNECT_TOOL_PORT)
    set(
-            AVR_CONNECT_TOOL_PORT /dev/tty.usbserial
-            CACHE STRING "Set default connection tool port to /dev/tty.usbserial (this is almost certianly wrong)"
+            AVR_CONNECT_TOOL_PORT usbserial
+            CACHE STRING "Set default connection tool port to usbserial (enumerates all usbserial)"
    )
 endif(NOT AVR_CONNECT_TOOL_PORT)
 
@@ -137,6 +137,10 @@ if(NOT AVR_ISP_PROGRAMMER)
     )
 endif(NOT AVR_ISP_PROGRAMMER)
 
+if(NOT USBSERIAL_DEVS)
+   file(GLOB USBSERIAL_DEVS /dev/tty.usbserial* )
+endif(NOT USBSERIAL_DEVS)
+
 # default MCU (chip)
 if(NOT AVR_MCU)
     set(
@@ -155,12 +159,12 @@ if(NOT AVR_SIZE_ARGS)
 endif(NOT AVR_SIZE_ARGS)
 
 # prepare base flags for upload tool
-set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER} -P ${AVR_UPLOADTOOL_PORT})
+set(AVR_UPLOADTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_PROGRAMMER})
 
 # prepare base flags for ISP tool
 set(AVR_ISPTOOL_BASE_OPTIONS -p ${AVR_MCU} -c ${AVR_ISP_PROGRAMMER} -P ${AVR_ISPTOOL_PORT})
 
-set(AVR_CONNECT_TOOL_BASE_OPTIONS -D ${AVR_CONNECT_TOOL_PORT})
+set(AVR_CONNECT_TOOL_BASE_OPTIONS)
 
 # use AVR_UPLOADTOOL_BAUDRATE as baudrate for upload tool (if defined)
 if(AVR_UPLOADTOOL_BAUDRATE)
@@ -310,24 +314,48 @@ function(add_avr_executable EXECUTABLE_NAME)
          ADDITIONAL_MAKE_CLEAN_FILES "${map_file}"
    )
 
-   # upload - with avrdude
-   add_custom_target(
-      upload_${EXECUTABLE_NAME}
-      ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} ${AVR_UPLOADTOOL_OPTIONS}
-         -U flash:w:${hex_file}
-      DEPENDS ${hex_file}
-      COMMENT "Uploading ${hex_file} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
-   )
+   if (AVR_UPLOADTOOL_PORT STREQUAL usbserial)
+      foreach(USBSERIAL_DEV IN LISTS USBSERIAL_DEVS)
+         get_filename_component(DEV ${USBSERIAL_DEV} NAME)
+         # upload - with avrdude
+         add_custom_target(
+            upload_${EXECUTABLE_NAME}_${DEV}
+            ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${USBSERIAL_DEV} ${AVR_UPLOADTOOL_OPTIONS}
+               -U flash:w:${hex_file}
+            DEPENDS ${hex_file}
+            COMMENT "Uploading ${hex_file} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
+         )
 
-   # upload eeprom only - with avrdude
-   # see also bug http://savannah.nongnu.org/bugs/?40142
-   add_custom_target(
-      upload_${EXECUTABLE_NAME}_eeprom
-      ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} ${AVR_UPLOADTOOL_OPTIONS}
-         -U eeprom:w:${eeprom_image}
-      DEPENDS ${eeprom_image}
-      COMMENT "Uploading ${eeprom_image} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
-   )
+         # upload eeprom only - with avrdude
+         # see also bug http://savannah.nongnu.org/bugs/?40142
+         add_custom_target(
+            upload_${EXECUTABLE_NAME}_eeprom_${DEV}
+            ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${USBSERIAL_DEV} ${AVR_UPLOADTOOL_OPTIONS}
+               -U eeprom:w:${eeprom_image}
+            DEPENDS ${eeprom_image}
+            COMMENT "Uploading ${eeprom_image} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
+         )
+      endforeach()
+   else(AVR_UPLOADTOOL_PORT STREQUAL usbserial)
+      # upload - with avrdude
+      add_custom_target(
+         upload_${EXECUTABLE_NAME}
+         ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT} ${AVR_UPLOADTOOL_OPTIONS}
+            -U flash:w:${hex_file}
+         DEPENDS ${hex_file}
+         COMMENT "Uploading ${hex_file} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
+      )
+
+      # upload eeprom only - with avrdude
+      # see also bug http://savannah.nongnu.org/bugs/?40142
+      add_custom_target(
+         upload_${EXECUTABLE_NAME}_eeprom
+         ${AVR_UPLOADTOOL} ${AVR_UPLOADTOOL_BASE_OPTIONS} -P ${AVR_UPLOADTOOL_PORT} ${AVR_UPLOADTOOL_OPTIONS}
+            -U eeprom:w:${eeprom_image}
+         DEPENDS ${eeprom_image}
+         COMMENT "Uploading ${eeprom_image} to ${AVR_MCU} using ${AVR_PROGRAMMER}"
+      )
+   endif(AVR_UPLOADTOOL_PORT STREQUAL usbserial)
 
    # disassemble
    add_custom_target(
@@ -505,10 +533,20 @@ function(avr_generate_fixed_targets)
          COMMENT "Program calibration status of internal oscillator from ${AVR_MCU}_calib.hex."
    )
 
-   add_custom_target(
-      connect
-      ${AVR_CONNECT_TOOL} ${AVR_CONNECT_TOOL_BASE_OPTIONS}
-   )
+   if (AVR_CONNECT_TOOL_PORT STREQUAL usbserial)
+      foreach(USBSERIAL_DEV IN LISTS USBSERIAL_DEVS)
+         get_filename_component(DEV ${USBSERIAL_DEV} NAME)
+         add_custom_target(
+            connect_${DEV}
+            ${AVR_CONNECT_TOOL} ${AVR_CONNECT_TOOL_BASE_OPTIONS} -D ${USBSERIAL_DEV}
+         )
+      endforeach(USBSERIAL_DEV IN LISTS USBSERIAL_DEVS)
+   else (AVR_CONNECT_TOOL_PORT STREQUAL usbserial)
+      add_custom_target(
+         connect
+         ${AVR_CONNECT_TOOL} ${AVR_CONNECT_TOOL_BASE_OPTIONS} -D ${AVR_CONNECT_TOOL_PORT}
+      )
+   endif(AVR_CONNECT_TOOL_PORT STREQUAL usbserial)
 endfunction()
 
 ##########################################################################
